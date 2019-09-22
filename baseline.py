@@ -34,7 +34,6 @@ class Baselines:
     
     return objs
 
-
   def build_roll_up(self, windowSize, pTarget, ts):
     """
     Find the pN% target per window in the time seriers
@@ -117,50 +116,30 @@ class Baselines:
   def build_baseline(self, nth, pTarget, ts):
     """
     This function will find the pN% element in a artray of every nth ts mesurment
-    For exsample build an arrays of every 3rd element and find p50% element
-    input = [1,2,3,4,5,6,7,8,9,10,11,12,13,14]
-    output =
-    [
-      [1,4,7,10,13] = 7
-      [2,5,8,11,14] = 8
-      [3,6,9,12] = 6
-    ]
+    Example: For the p95% for the same hour of every day using hourly roll ups as the input "build_baseline(24, 95. rollup)"
+    Example: For the p95% for the same hour of the same day of the week using hourly roll ups as the input "build_baseline(168, 95. rollup)"
     nth [int]: The nth element to be in each array = Logicly this also means the number of arrays :) too
     pTarget [int]: The pN% target; 95 = p95%
     ts [array]: An array of timeseries data
+    
+    Retrurns [array]: of baselines - Note: an dict with the element 'value' is used and not an int so that extra tags such as Day or hour can be added by the user
     """
     # Loop through each target
     baselines = [] # An epmty array for adding baseline objects for each object
     for obj in ts:
-      groups = [[]] * nth # An empty array to hold our nth groups
-      nthCount = 0
-      # Add each nth element in the nth array
-      for tsValue in obj['timeSeries']:
-        groups[nthCount].append(tsValue)
-        nthCount = nthCount + 1
-        if nthCount == nth:
-          nthCount = 0
-      
+      groups = []
+      for i in range(0, nth):
+        groups.append(obj['timeSeries'][i::nth])
+          
       #find the nth element
       baseline = [] # An empty array to hold our baseline objects
       for group in groups:
         l = len(group)
         i = math.floor(l * (pTarget / 100)) # Find the pN% element index
-        
+
         # Sort our list
         group = sorted(group, key = lambda i: i['value'])
-        t = datetime.datetime.fromtimestamp(group[i]['timeIndex']/1000)
-        year, week, weekday = t.isocalendar()
         baseline.append({
-          'year': t.year,
-          'month': t.month,
-          'week': week,
-          'day': t.day,
-          'dayOfWeek': weekday, # Monday = 1; Sunday = 7
-          'hour': t.hour,
-          'minute': t.minute,
-          'second': t.second,
-          'time': t,
           'value': group[i]['value']
         })
       
@@ -171,4 +150,132 @@ class Baselines:
       })
       
     return baselines
+    
+  def getTargetFromBaseLine(self, baselineValue, aboveBase, metricType):
+    """
+    baselineValue [int]: baseline value from which to set trigger
+    aboveBase [int]: Trigger level above baseline (Can be negative)
+    metricType [string{unit,precent}]: aboveBase type
+    """
+    if metricType == 'unit':
+      triggerPoint = baselineValue + aboveBase
+    else:
+      triggerPoint = baselineValue * (1+(aboveBase/100))
+    
+    return triggerPoint
   
+  def checkForEvent(self, aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert):
+    if ((aboveBase > -1 and datapoint['value'] > triggerPoint) or (aboveBase < 0 and datapoint['value'] < triggerPoint)):
+      events = self.addEvent(events, alertWindowSize, datapoint)
+      alerts = self.checkForAlert(alerts, alertSameWindow, eventsPerAlert, events, datapoint)
+    
+    return events, alerts
+  
+  def addEvent(self, events, alertWindowSize, datapoint):
+    """
+    This function adds events, element time out, and count returns newEventList
+    events [array]: An array of timestamps
+    datapoint [obj]: A TS object
+    """
+    ageout = datapoint['timeIndex'] - alertWindowSize
+    newEventList = [] # A new empty event
+    
+    # Do TTL upkeep
+    for event in events:
+      if event > ageout:
+        newEventList.append(event)
+        
+    # Add Event
+    newEventList.append(datapoint['timeIndex'])
+    return newEventList
+    
+  def checkForAlert(self, alerts, alertSameWindow, eventsPerAlert, events, event):
+    """
+    This function will check for alerts
+    alerts [array]: An array of alerts
+    alertSameWindow [int]: The number of seconds in which new events are part of the same alert
+    eventsPerAlert [int]: The number of events in the alertWindow to activate an alert
+    events [array]: An array of timestamps
+    event [obj]: A timeseriers datapoint
+    """
+    if len(events) >= eventsPerAlert:
+      if (alerts and (alerts[-1]['timeIndex'] + alertSameWindow) > event['timeIndex']):
+        # Same alert
+        if alerts[-1]['value'] < event['value']:
+          # Set alert to peak metric
+          alerts[-1]['value'] = event['value']
+        alerts[-1]['end'] = event['timeIndex']
+      else:
+        # New alert
+        alerts.append({
+          'start': event['timeIndex'],
+          'end': event['timeIndex'],
+          'value': event['value']
+        })
+    return alerts
+  
+  def get_alerts(self, alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, baselineStartIndex, baselineWindow, aboveBase, metricType, baselines, ts):
+    """
+    This function looks for events in Kentik query normlized timeseries data based on a set of baslines
+    alertWindowSize [int]: The number of seconds for the size of window in which to look for an alert
+    alertSameWindow [int]: The number of seconds in which new events are part of the same alert
+    eventsPerAlert [int]: The number of events in the alertWindow to activate an alert
+    eventWindowSize [int]: The number of seconds for the size of window in which to look for an event
+    baselineStartIndex [int]: The first baseline to match to
+    baselineWindow [int]: The number of seconds each base line incroment represnts
+    aboveBase [int]: Trigger level above baseline (Can be negative)
+    metricType [string{unit,precent}]: aboveBase type
+    baselines [array]: An array of baseline objects from the build_baseline function of this class
+    ts [array]: An array of Kentik Query normlized timeseries data object from the normlizeKentik function of this class
+    """
+    alertWindowSize = alertWindowSize * 1000
+    alertSameWindow = alertSameWindow * 1000
+    eventWindowSize = eventWindowSize * 1000
+    baselineWindow = baselineWindow * 1000
+    allAlerts = [] # An empty array used to hold alerts found for each key
+    
+    # Loop through each time searies object
+    for obj in ts:
+      eventFond = False # Var used to indecate an event was found in this window
+      alertObj = {
+        'name': obj['name'],
+        'metric': obj['metric'],
+        'alerts': []
+      }
+      # Find the right baseline to apply
+      baseline = next((item for item in baselines if item['name'] == obj['name']), False)
+      if baseline:
+        # Set Max time in this baseline value
+        timeSlice = int(obj['timeSeries'][0]['timeIndex'])
+        timeSlice = math.floor(timeSlice / baselineWindow)
+        timeSlice = timeSlice * baselineWindow
+        maxTime = timeSlice + baselineWindow
+        triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineStartIndex]['value'], aboveBase, metricType)
+        events = [] # An array to hold found events
+        alerts = [] # An array to hold alerts
+        
+        # Loop through each ts datapoint
+        for datapoint in obj['timeSeries']:
+          # Check if we need to change up baseline to next window
+          if datapoint['timeIndex'] < maxTime:
+            events, alerts = self.checkForEvent(aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
+          else:
+            maxTime = maxTime + baselineWindow
+            baselineStartIndex = baselineStartIndex + 1
+            if baselineStartIndex >= len(baseline['baseline']):
+              baselineStartIndex = 0
+            triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineStartIndex]['value'], aboveBase, metricType)
+            events, alerts = self.checkForEvent(aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
+        
+        alertObj['alerts'] = alerts
+        
+        # Clean
+        timeSlice = None
+        maxTime = None
+        triggerPoint = None
+        events = None
+        alerts = None
+        
+      allAlerts.append(alertObj)
+    
+    return allAlerts
