@@ -27,7 +27,7 @@ class Baselines:
         objs.append({
           'name': obj['key'],
           'metric': objTSKey[0],
-          'timeSeries': tsData
+          'timeSeries': tsData.copy()
         })
     
     tsObj = None
@@ -135,13 +135,18 @@ class Baselines:
       baseline = [] # An empty array to hold our baseline objects
       for group in groups:
         l = len(group)
-        i = math.floor(l * (pTarget / 100)) # Find the pN% element index
+        if l:
+          i = math.floor(l * (pTarget / 100)) # Find the pN% element index
 
-        # Sort our list
-        group = sorted(group, key = lambda i: i['value'])
-        baseline.append({
-          'value': group[i]['value']
-        })
+          # Sort our list
+          group = sorted(group, key = lambda i: i['value'])
+          baseline.append({
+            'value': group[i]['value']
+          })
+        else:
+          baseline.append({
+            'value': 0
+          })
       
       # Add full baseline for this object to our otput array baselines
       baselines.append({

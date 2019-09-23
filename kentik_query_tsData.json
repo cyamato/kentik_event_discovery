@@ -1,0 +1,120 @@
+{
+  "queries": [
+    {
+      "bucket": "Left +Y Axis",
+      "isOverlay": false,
+      "query": {
+        "all_devices": true,
+        "aggregateTypes": [
+          "max_bits_per_sec"
+        ],
+        "aggregateThresholds": {
+          "avg_bits_per_sec": 0,
+          "p95th_bits_per_sec": 0,
+          "max_bits_per_sec": 0,
+          "agg_total_bytes": 0
+        },
+        "bracketOptions": "",
+        "cidr": 32,
+        "cidr6": 128,
+        "customAsGroups": false,
+        "cutFn": {},
+        "cutFnRegex": {},
+        "cutFnSelector": {},
+        "depth": 350,
+        "descriptor": "",
+        "device_name": [],
+        "device_labels": [],
+        "device_sites": [],
+        "device_types": [],
+        "fastData": "Auto",
+        "filterDimensionsEnabled": false,
+        "filterDimensionName": "Total",
+        "filterDimensionOther": false,
+        "filterDimensions": {
+          "connector": "All",
+          "filterGroups": []
+        },
+        "hostname_lookup": false,
+        "isOverlay": false,
+        "lookback_seconds": 0,
+        "from_to_lookback": 3600,
+        "generatorDimensions": [],
+        "generatorPanelMinHeight": 250,
+        "generatorMode": false,
+        "generatorColumns": 1,
+        "generatorQueryTitle": "{{generator_series_name}}",
+        "generatorTopx": 8,
+        "matrixBy": [],
+        "metric": [
+          "bytes"
+        ],
+        "mirror": false,
+        "mirrorUnits": true,
+        "outsort": "max_bits_per_sec",
+        "overlay_day": -7,
+        "overlay_timestamp_adjust": false,
+        "query_title": "",
+        "secondaryOutsort": "",
+        "secondaryTopxSeparate": false,
+        "secondaryTopxMirrored": false,
+        "show_overlay": false,
+        "show_total_overlay": false,
+        "starting_time": "2019-09-22 15:00",
+        "ending_time": "2019-09-22 16:00",
+        "sync_all_axes": false,
+        "sync_axes": false,
+        "sync_extents": true,
+        "show_site_markers": false,
+        "topx": 40,
+        "update_frequency": 0,
+        "use_log_axis": false,
+        "use_secondary_log_axis": false,
+        "viz_type": "stackedArea",
+        "aggregates": [
+          {
+            "value": "max_bits_per_sec",
+            "column": "f_sum_both_bytes",
+            "fn": "max",
+            "label": "Bits/s Sampled at Ingress + Egress Max",
+            "unit": "bytes",
+            "group": "Bits/s Sampled at Ingress + Egress",
+            "origLabel": "Max",
+            "sample_rate": 1,
+            "raw": true,
+            "name": "max_bits_per_sec"
+          }
+        ],
+        "filters_obj": {
+          "connector": "All",
+          "filterGroups": [
+            {
+              "name": "",
+              "named": false,
+              "connector": "All",
+              "not": false,
+              "autoAdded": "",
+              "filters": [
+                {
+                  "filterField": "i_dst_connect_type_name",
+                  "operator": "=",
+                  "filterValue": "customer"
+                }
+              ],
+              "saved_filters": [
+                {
+                  "filter_id": 64,
+                  "is_not": true
+                }
+              ],
+              "filterGroups": []
+            }
+          ]
+        },
+        "dimension": [
+          "AS_dst"
+        ]
+      }
+    }
+  ]
+}
