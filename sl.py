@@ -154,13 +154,13 @@ def getTSData(customerGroups, slices):
       print('For ' + str(len(cGroup)) + ' customers')
       print('Submited Queries ' + str(len(tsBulkQuery['queries'])))
       
-      endTime = datetime.datetime.now() + datetime.timedelta(seconds=10)
+      endTime = datetime.now() + timedelta(seconds=10)
       
       customerTSData = kAPI.topXQuery(tsBulkQuery)
       
       # Space request to not overun the API
       while True:
-        if datetime.datetime.now() >= endTime:
+        if datetime.now() >= endTime:
           break
     
       print('Recived ' + str(len(customerTSData['results'])) + ' responses')
@@ -211,7 +211,7 @@ print ('Groupping Customers')
 customerGroups = groupCustomers(customers)
 print (str(len(customers)) + ' customers in ' + str(len(customerGroups)) + ' groups')
 secToComplete = len(customerGroups) * len(slices) * 10
-TimeToComplete = datetime.datetime.now() + datetime.timedelta(seconds=secToComplete)
+TimeToComplete = datetime.now() + timedelta(seconds=secToComplete)
 print ('Expedcted to complete in ' + str(math.floor(secToComplete/60)) + ' munites at ' + str(TimeToComplete))
 print ()
 tsData = getTSData(customerGroups, slices)
