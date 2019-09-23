@@ -216,7 +216,7 @@ class Baselines:
         alerts.append({
           'start': event['timeIndex'],
           'end': event['timeIndex'],
-          'length': 0
+          'length': 0,
           'value': event['value']
         })
     return alerts
