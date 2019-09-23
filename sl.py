@@ -10,6 +10,10 @@ import copy
 from datetime import datetime
 from datetime import timedelta  
 
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+
 import kentik
 import baseline
 
@@ -116,83 +120,91 @@ def getTSData(customerGroups, slices):
   # Load query
   with open('kentik_query_tsData.json') as json_file:
     tsBulkQueryBase = json.load(json_file)
-  tsQueryBase = tsBulkQueryBase['queries'][0]
-  
-  tsBulkQueryBase['queries'] = []  # Clear out Querires
-  combinedTSData = []
+    
+  combinedTSData = [] # An empty array to hold complied results
   
   # Loop through each group of customers
-  workingGroup = 1 # Only used for tracking in the print output
+  workingGroup = 0 # Only used for tracking in the print output
   for cGroup in customerGroups:
-    # Setup Query
-    tsBulkQuery = copy.deepcopy(tsBulkQueryBase)
-    tsQuery = copy.deepcopy(tsQueryBase)
-    tsQuery['query']['filters_obj']['filterGroups'][0]['filters'].append({
-      'filterField': 'dst_as',
-      'operator': '=',
-      'filterValue':  ','.join(cGroup)
-    })
+    workingGroup = workingGroup + 1
     
     # Loop throguh and build bulk queries over time for each group
     for tsSlice in slices:
-      tsQuery['query']['starting_time'] = tsSlice['start']
-      tsQuery['query']['ending_time'] = tsSlice['end']
-      tsBulkQuery['queries'].append(copy.deepcopy(tsQuery))
+      # Setup Query
+      tsBulkQuery = copy.deepcopy(tsBulkQueryBase)
+      if len(tsBulkQuery['queries'][0]['query']['filters_obj']['filterGroups']) < 1:
+        tsQuery['query']['filters_obj']['filterGroups'] = [{              
+          'name': '',
+          'named': false,
+          'connector': 'All',
+          'not': false,
+          'autoAdded': '',
+          'filters': []
+        }]
+      tsBulkQuery['queries'][0]['query']['filters_obj']['filterGroups'][0]['filters'].append({
+        'filterField': 'dst_as',
+        'operator': '=',
+        'filterValue':  ','.join(cGroup)
+      })
+      tsBulkQuery['queries'][0]['query']['starting_time'] = tsSlice['start']
+      tsBulkQuery['queries'][0]['query']['ending_time'] = tsSlice['end']
     
-    # Make Query
-    print ('Quering Kentik for Timeseries Data Group: ' + str(workingGroup))
-    workingGroup = workingGroup + 1
-    customerTSData = kAPI.topXQuery(tsBulkQuery)
+      # Make Query
+      print ('Quering Kentik for Timeseries Data Group: ' + str(workingGroup) + ' Time Slice ' + str(tsSlice['start']))
+      print('For ' + str(len(cGroup)) + ' customers')
+      print('Submited Queries ' + str(len(tsBulkQuery['queries'])))
+      
+      endTime = datetime.datetime.now() + datetime.timedelta(seconds=2)
+      
+      customerTSData = kAPI.topXQuery(tsBulkQuery)
+      
+      # Space request to not overun the API
+      while True:
+        if datetime.datetime.now() >= endTime:
+          break
     
-    print('For ' + str(len(cGroup)) + ' customers')
-    print('Submited Queries ' + str(len(tsBulkQuery['queries'])))
-    print('Recived ' + str(len(customerTSData['results'])) + ' responses')
-    print('Recived ' + str(len(customerTSData['results'][0]['data'])) + ' responses in response group one')
-    print()
+      print('Recived ' + str(len(customerTSData['results'])) + ' responses')
     
-    # Loop through results, combine and normlize
-    for result in customerTSData['results']:
-      for key in result['data']:
-        objTSKey = list(key['timeSeries'].keys()) # Get the field becuse it can be any demision
-        tsData = []
-        for datapoint in key['timeSeries'][objTSKey[0]]['flow']:
-          tsData.append({
-            'timeIndex': datapoint[0],
-            'value': datapoint[1]
-          })
-        fondKey = next((x for x in combinedTSData if x['name'] == key['key']), None)
-        if fondKey:
-          # print ('Fond ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
-          fondKey['timeSeries'].append(tsData.copy())
-        else:
-          # print ('Adding ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
-          combinedTSData.append({
-            'name': key['key'],
-            'metric': objTSKey[0],
-            'timeSeries': tsData.copy()
-          })
-        key = None
-      result = None
-    customerTSData = None
+      # Loop through results, combine and normlize
+      groupCount = 1
+      for result in customerTSData['results']:
+        print('Recived ' + str(len(result['data'])) + ' responses in response ' + str(groupCount))
+        groupCount = groupCount + 1
+        for key in result['data']:
+          objTSKey = list(key['timeSeries'].keys()) # Get the field becuse it can be any demision
+          tsData = []
+          for datapoint in key['timeSeries'][objTSKey[0]]['flow']:
+            tsData.append({
+              'timeIndex': datapoint[0],
+              'value': datapoint[1]
+            })
+          fondKey = next((x for x in combinedTSData if x['name'] == key['key']), None)
+          if fondKey:
+            # print ('Fond ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
+            fondKey['timeSeries'].append(tsData.copy())
+          else:
+            # print ('Adding ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
+            combinedTSData.append({
+              'name': key['key'],
+              'metric': objTSKey[0],
+              'timeSeries': tsData.copy()
+            })
+          key = None
+        result = None
+      customerTSData = None
+      print ()
     
   return combinedTSData
-
-# TODO: Loop through each customer
-  # TODO: Loop through start and end in defined incorments in Args getting TS data
-    # TODO: Add results to an array for this customer
-
-# TODO: Find Events
-
-# TODO: Output to CSV
-# TODO: Output to Graph (seaborn https://seaborn.pydata.org/examples/different_scatter_variables.html)
 
 kAPI = setupKentikAPI()
 
 print ('Setting up arguments')
 arguments = args()
+
 print ('Getting Time Slices for Data Query')
 slices = getTimeSlices(arguments.queryStartTime, arguments.queryEndTime, arguments.queryResultion)
 print ()
+
 print ('Getting Customers from Kentik... (can take several seconds)')
 customers = getCustomers(arguments.queryStartTime, arguments.queryEndTime)
 print ('Groupping Customers')
@@ -200,12 +212,21 @@ customerGroups = groupCustomers(customers)
 print (str(len(customers)) + ' customers in ' + str(len(customerGroups)) + ' groups')
 print ()
 tsData = getTSData(customerGroups, slices)
+
 print ('Making Baselines')
 base = baseline.Baselines()
 firstBase = base.build_roll_up(3600, 95, tsData) # Find p95 per hour
+# Example: For the p95% for the same hour of the same day of the week using hourly roll ups as the input "build_baseline(168, 95. rollup)"
+# nth [int]: The nth element to be in each array = Logicly this also means the number of arrays :) too
+# pTarget [int]: The pN% target; 95 = p95%
 baseline = base.build_baseline(168, 95, firstBase)
+
 print ('Checking for events')
+# base.get_alerts(alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, baselineStartIndex, baselineWindow, aboveBase, metricType, baselines, ts)
+# 2 events within 10mins and every event with in 10mins is an alert where an event is a any mesurement with in 1min over 100% of the baseline using tsData as the input ts data
 alerts = base.get_alerts(600, 600, 2, 60, 0, 3600, 100, 'precent', baseline, tsData)
+
+# Filter to only report clients with attacks
 print ('Just Atacks')
 print ()
 atacks = []
@@ -218,10 +239,32 @@ alerts = None
 print (str(len(atacks)) + ' Atacks Fond: ')
 print (atacks)
 print ()
-print (Writing to csv)
-with open('kentik_historic_events.csv', 'w') as csv_file:
+
+print ('Writing to csv')
+if not os.path.exists('./output'):
+    os.makedirs('./output')
+with open('./output/kentik_historic_events.csv', 'w') as csv_file:
+  csv_file.write('CustomerASN, StartTime, EndTime, Length, Value, Metric\n')
   for customer in atacks:
     for atack in customer:
-      csv_file.write(customer['name'] + ',' + atack['start'] + ',' +  atack['end'] + ',' +  atack['value'] + ',' +  customer['metric'] + '\n')
+      csv_file.write(customer['name'] + ',' + atack['start'] + ',' +  atack['end'] + ',' +  atack['length'] + ',' +  atack['value'] + ',' +  customer['metric'] + '\n')
   csv_file.close()
-print ('Alerts wrtien too kentik_historic_events.csv')
+atacks = None
+print ('Alerts wrtien too ./output/kentik_historic_events.csv')
+
+# TODO: Output to Graph (seaborn https://seaborn.pydata.org/examples/different_scatter_variables.html)
+print ('Making Graph')
+atackDS = pd.read_csv('./output/kentik_historic_events.csv')
+sns.set(style='whitegrid')
+sns.set_context('poster')
+f, ax = plt.subplots(figsize=(6.5, 6.5))
+sns.despine(f, left=True, bottom=True)
+kah = sns.scatterplot(x='StartTime', y='Value',
+                hue='CustomerASN', size='Length',
+                palette='Blues_d',
+                sizes=(1, 8), linewidth=0,
+                data=diamonds, ax=ax)
+print ('Saving Graph Image to ./output/kentik_historic_events.png')
+plt.savefig('./output/kentik_historic_events.png')
+print ('Showing Graph Image')
+plt.show()

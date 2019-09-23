@@ -1,0 +1,10 @@
+version: "3.7"
+services:
+  khistory:
+    build: .
+    environment:
+      - KENTIK_API_USER='johndoe@expans.com'
+      - KENTIK_API_PASSWORD='adsf8960svypzsyadf06g'
+    volumes:
+      - "/tmp:/usr/src/app/output"
+    command: [ './sl.py' ]

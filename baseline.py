@@ -210,11 +210,13 @@ class Baselines:
           # Set alert to peak metric
           alerts[-1]['value'] = event['value']
         alerts[-1]['end'] = event['timeIndex']
+        alerts[-1]['length'] = (event['timeIndex']-alerts[-1]['start']).total_seconds/60
       else:
         # New alert
         alerts.append({
           'start': event['timeIndex'],
           'end': event['timeIndex'],
+          'length': 0
           'value': event['value']
         })
     return alerts
