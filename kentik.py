@@ -38,6 +38,7 @@ class KentikAPI:
       print(response.config)
     
     response.close()
+    response = None
     return r
 
   def topXQuery(self, query):

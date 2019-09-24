@@ -9,3 +9,13 @@ services:
       - "/tmp:/usr/src/app/output"
       - "/tmp/input:/usr/src/app/input"
     command: [ './sl.py' ]
+  harperdb:
+    image: harperdb/hdb
+    expose:
+      - "9925"
+    container_name: harperdb
+    volumes:
+      - harper_db:/opt/HarperDB/hdb
+    networks:
+      - dev
+    restart: always
