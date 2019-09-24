@@ -8,7 +8,8 @@ import re
 import math
 import copy
 from datetime import datetime
-from datetime import timedelta  
+from datetime import timedelta
+import hashlib 
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -46,7 +47,7 @@ def getCustomers(queryStartTime, queryEndTime):
   queryEndTime [string]: the time date to end the query
   """
   # Load query
-  with open('kentik_query_customers.json') as json_file:
+  with open('./input/kentik_query_customers.json') as json_file:
     customerQuery = json.load(json_file)
   customerQuery['queries'][0]['query']['starting_time'] = queryStartTime
   customerQuery['queries'][0]['query']['ending_time'] = queryEndTime
@@ -118,10 +119,18 @@ def getTSData(customerGroups, slices):
   This function will make looped bulk API Calls to Kentik
   """
   # Load query
-  with open('kentik_query_tsData.json') as json_file:
+  with open('./input/kentik_query_tsData.json') as json_file:
     tsBulkQueryBase = json.load(json_file)
     
   combinedTSData = [] # An empty array to hold complied results
+  bufferLog = [] # An empty array to track queries
+  
+  # Load any buffers
+  if os.path.isfile('./output/buffer_log.json') and os.path.isfile('./output/buffer_cache.json'):
+    with open('./output/buffer_log.json.json') as buffer_log:
+      bufferLog = json.load(buffer_log)
+    with open('./output/buffer_cache.json.json') as buffer_cache:
+      combinedTSData = json.load(buffer_cache)
   
   # Loop through each group of customers
   workingGroup = 0 # Only used for tracking in the print output
@@ -150,53 +159,72 @@ def getTSData(customerGroups, slices):
       tsBulkQuery['queries'][0]['query']['ending_time'] = tsSlice['end']
     
       # Make Query
-      print ('Quering Kentik for Timeseries Data Group: ' + str(workingGroup) + ' Time Slice ' + str(tsSlice['start']))
-      print('For ' + str(len(cGroup)) + ' customers')
-      print('Submited Queries ' + str(len(tsBulkQuery['queries'])))
+      QueryHash = ','.join(cGroup) + str(tsSlice['start'])
+      QueryHash = hashlib.md5(QueryHash.encode())
+      QueryHash = QueryHash.hexdigest()
       
-      endTime = datetime.now() + timedelta(seconds=10)
+      # Check if we have this query in the cache
+      if QueryHash in bufferLog:
+        print ('Query for Timeseries Data Group: ' + str(workingGroup) + ' Time Slice ' + str(tsSlice['start']) + ' Hash Group: ' + QueryHash + ' is in cache, skipping')
+      else:
+        print ('Quering Kentik for Timeseries Data Group: ' + str(workingGroup) + ' Time Slice ' + str(tsSlice['start']) + ' Hash Group: ' + QueryHash)
+        print('For ' + str(len(cGroup)) + ' customers')
+        print('Submited Queries ' + str(len(tsBulkQuery['queries'])) + ' @ ' + str(datetime.now()))
+        
+        endTime = datetime.now() + timedelta(seconds=10)
+        
+        customerTSData = kAPI.topXQuery(tsBulkQuery)
       
-      customerTSData = kAPI.topXQuery(tsBulkQuery)
+        print('Recived ' + str(len(customerTSData['results'])) + ' responses')
       
-      # Space request to not overun the API
-      while True:
-        if datetime.now() >= endTime:
-          break
-    
-      print('Recived ' + str(len(customerTSData['results'])) + ' responses')
-    
-      # Loop through results, combine and normlize
-      groupCount = 1
-      for result in customerTSData['results']:
-        print('Recived ' + str(len(result['data'])) + ' responses in response ' + str(groupCount))
-        groupCount = groupCount + 1
-        for key in result['data']:
-          objTSKey = list(key['timeSeries'].keys()) # Get the field becuse it can be any demision
-          tsData = []
-          for datapoint in key['timeSeries'][objTSKey[0]]['flow']:
-            tsData.append({
-              'timeIndex': datapoint[0],
-              'value': datapoint[1]
-            })
-          fondKey = next((x for x in combinedTSData if x['name'] == key['key']), None)
-          if fondKey:
-            # print ('Fond ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
-            fondKey['timeSeries'].append(tsData.copy())
-          else:
-            # print ('Adding ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
-            combinedTSData.append({
-              'name': key['key'],
-              'metric': objTSKey[0],
-              'timeSeries': tsData.copy()
-            })
-          key = None
-        result = None
-      customerTSData = None
+        # Loop through results, combine and normlize
+        groupCount = 1
+        for result in customerTSData['results']:
+          print('Recived ' + str(len(result['data'])) + ' responses in response ' + str(groupCount))
+          groupCount = groupCount + 1
+          for key in result['data']:
+            objTSKey = list(key['timeSeries'].keys()) # Get the field becuse it can be any demision
+            tsData = []
+            for datapoint in key['timeSeries'][objTSKey[0]]['flow']:
+              tsData.append({
+                'timeIndex': datapoint[0],
+                'value': datapoint[1]
+              })
+            fondKey = next((x for x in combinedTSData if x['name'] == key['key']), None)
+            if fondKey:
+              # print ('Fond ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
+              fondKey['timeSeries'].append(tsData.copy())
+            else:
+              # print ('Adding ' + key['key'] + ' Results Count: ' + str(len(result['data'])))
+              combinedTSData.append({
+                'name': key['key'],
+                'metric': objTSKey[0],
+                'timeSeries': tsData.copy()
+              })
+            key = None
+          result = None
+        customerTSData = None
+              
+        # Buffer Output
+        with open('./output/buffer_log.json', 'w') as buffer_log:
+          bufferLog.append(QueryHash)
+          buffer_log.write(json.dumps(bufferLog))
+        with open('./output/buffer_cache.json', 'w') as buffer_cache:
+          buffer_cache.write(combinedTSData)
+        
+        # Space request to not overun the API
+        while True:
+          if datetime.now() >= endTime:
+            break
+        
       print ()
     
   return combinedTSData
 
 kAPI = setupKentikAPI()
+
+if not os.path.exists('./output'):
+    os.makedirs('./output')
 
 print ('Setting up arguments')
 arguments = args()
@@ -244,8 +272,6 @@ print (atacks)
 print ()
 
 print ('Writing to csv')
-if not os.path.exists('./output'):
-    os.makedirs('./output')
 with open('./output/kentik_historic_events.csv', 'w') as csv_file:
   csv_file.write('CustomerASN, StartTime, EndTime, Length, Value, Metric\n')
   for customer in atacks:

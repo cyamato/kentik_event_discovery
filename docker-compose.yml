@@ -7,4 +7,5 @@ services:
       - KENTIK_API_PASSWORD='adsf8960svypzsyadf06g'
     volumes:
       - "/tmp:/usr/src/app/output"
+      - "/tmp/input:/usr/src/app/input"
     command: [ './sl.py' ]
