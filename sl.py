@@ -311,17 +311,22 @@ def makeDB():
     'Content-Type': 'application/json',
     'Authorization': harperDB_Auth
   }
+  
   payload = {
     "operation":"create_schema",
     "schema": "kentik"
   }
   response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
+  print(response.text)
+  
   payload = {
     "operation":"drop_table",
     "schema": "kentik",
     "table": "kentikhistory"
   }
   response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
+  print(response.text)
+  
   payload = {
     "operation":"create_table",
     "schema": "kentik",
@@ -329,12 +334,14 @@ def makeDB():
     "hash_attribute": "name"
   }
   response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
+  print(response.text)
 
 def dbUpdate(newData):
   headers = {
     'Content-Type': 'application/json',
     'Authorization': harperDB_Auth
   }
+  
   payload = {
     "operation":"search_by_hash",
     "schema": "kentik",
@@ -345,9 +352,8 @@ def dbUpdate(newData):
   }
   # print(json.dumps(payload))
   response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
-
-  # print (response)
   results = response.json()
+  
   if (len(results) > 0):
     print ('Add to DB Entry')
     results[0]['timeSeries'].extend(newData['timeSeries'])
@@ -365,6 +371,7 @@ def dbUpdate(newData):
       "table": "kentikhistory",
       "records": [newData]
     }
+  
   response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
   print (response.text)
   response = None
