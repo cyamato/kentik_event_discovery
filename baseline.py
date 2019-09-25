@@ -46,42 +46,42 @@ class Baselines:
     
     # Loop through each ts object
     for obj in ts:
+      rollUps = [] # An empty array to hold pN%s
       if obj['timeSeries']:
         # Figure out the first window 
         sliceTime = obj['timeSeries'][0]['timeIndex'] # Get the first Timestamp
         sliceTime = math.floor(sliceTime / windowSize) # Get the rounded down number of windows
         sliceTime = sliceTime * windowSize # Get this back in seconds
         maxTimeInSlice = sliceTime + windowSize # Get the end of the slice time window
-        
         # Loop to extract the target per window
         window = [] # Am empty array to hold the time series data for the window
-        rollUps = [] # An empty array to hold pN%s
         for timeSlice in obj['timeSeries']:
-          if timeSlice['timeIndex'] < maxTimeInSlice: # We are with in the curent window
-            window.append(timeSlice['value'])  # Add timeslices metric value
-            nothingInThisTimeSlice = False
-          else: # Not in the window
-            if window:  # We have stuff in the buffer to add
-              l = len(window) # Get the number of elements in the slice
-              i = math.floor(l * (pTarget / 100)) # Find the pN% element index
-              
-              # Sort the array
-              window = sorted(window)
-              
-              rollUps.append({
-                'timeIndex': sliceTime,
-                'value': window[i]
-              })
-            else:
-              rollUps.append({
-                'timeIndex': sliceTime,
-                'value': None
-              })
-            sliceTime = maxTimeInSlice # Rest to next window
-            maxTimeInSlice = maxTimeInSlice + windowSize
-            window = [] # Empty Window
-            window.append(timeSlice['value']) # Add new slice
-        
+          if type(timeSlice) is dict:
+            if timeSlice['timeIndex'] < maxTimeInSlice: # We are with in the curent window
+              window.append(timeSlice['value'])  # Add timeslices metric value
+              nothingInThisTimeSlice = False
+            else: # Not in the window
+              if window:  # We have stuff in the buffer to add
+                l = len(window) # Get the number of elements in the slice
+                i = math.floor(l * (pTarget / 100)) # Find the pN% element index
+                
+                # Sort the array
+                window = sorted(window)
+                
+                rollUps.append({
+                  'timeIndex': sliceTime,
+                  'value': window[i]
+                })
+              else:
+                rollUps.append({
+                  'timeIndex': sliceTime,
+                  'value': None
+                })
+              sliceTime = maxTimeInSlice # Rest to next window
+              maxTimeInSlice = maxTimeInSlice + windowSize
+              window = [] # Empty Window
+              window.append(timeSlice['value']) # Add new slice
+          
         # Process the last one if there is any
         if window:
           l = len(window) # Get the number of elements in the slice
@@ -171,8 +171,9 @@ class Baselines:
   
   def checkForEvent(self, aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert):
     if ((aboveBase > -1 and datapoint['value'] > triggerPoint) or (aboveBase < 0 and datapoint['value'] < triggerPoint)):
+      # print ('Event Check ' + str(datapoint['value']) + ':' + str(triggerPoint) + ':' + str(aboveBase))
       events = self.addEvent(events, alertWindowSize, datapoint)
-      alerts = self.checkForAlert(alerts, alertSameWindow, eventsPerAlert, events, datapoint)
+      alerts = self.checkForAlert(alerts, alertSameWindow, eventsPerAlert, events, datapoint, triggerPoint)
     
     return events, alerts
   
@@ -194,7 +195,7 @@ class Baselines:
     newEventList.append(datapoint['timeIndex'])
     return newEventList
     
-  def checkForAlert(self, alerts, alertSameWindow, eventsPerAlert, events, event):
+  def checkForAlert(self, alerts, alertSameWindow, eventsPerAlert, events, event, triggerPoint):
     """
     This function will check for alerts
     alerts [array]: An array of alerts
@@ -204,30 +205,32 @@ class Baselines:
     event [obj]: A timeseriers datapoint
     """
     if len(events) >= eventsPerAlert:
-      if (alerts and (alerts[-1]['timeIndex'] + alertSameWindow) > event['timeIndex']):
+      if (alerts and (alerts[-1]['end'] + alertSameWindow) > event['timeIndex']):
         # Same alert
         if alerts[-1]['value'] < event['value']:
           # Set alert to peak metric
           alerts[-1]['value'] = event['value']
         alerts[-1]['end'] = event['timeIndex']
-        alerts[-1]['length'] = (event['timeIndex']-alerts[-1]['start']).total_seconds/60
+        alerts[-1]['length'] = (event['timeIndex']-alerts[-1]['start'])/600000 # In Minutes
       else:
         # New alert
         alerts.append({
           'start': event['timeIndex'],
           'end': event['timeIndex'],
           'length': 0,
-          'value': event['value']
+          'value': event['value'],
+          'baseline': triggerPoint
         })
     return alerts
   
-  def get_alerts(self, alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, baselineStartIndex, baselineWindow, aboveBase, metricType, baselines, ts):
+  def get_alerts(self, alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, eventMesurment, baselineStartIndex, baselineWindow, aboveBase, metricType, baselines, ts):
     """
     This function looks for events in Kentik query normlized timeseries data based on a set of baslines
     alertWindowSize [int]: The number of seconds for the size of window in which to look for an alert
     alertSameWindow [int]: The number of seconds in which new events are part of the same alert
     eventsPerAlert [int]: The number of events in the alertWindow to activate an alert
     eventWindowSize [int]: The number of seconds for the size of window in which to look for an event
+    eventMesurment [int]: The pN% mesurment in the event window to be used for base line comperson
     baselineStartIndex [int]: The first baseline to match to
     baselineWindow [int]: The number of seconds each base line incroment represnts
     aboveBase [int]: Trigger level above baseline (Can be negative)
@@ -251,29 +254,43 @@ class Baselines:
       }
       # Find the right baseline to apply
       baseline = next((item for item in baselines if item['name'] == obj['name']), False)
+      print('Checking customer ' + obj['name'])
       if baseline:
         # Set Max time in this baseline value
         timeSlice = int(obj['timeSeries'][0]['timeIndex'])
         timeSlice = math.floor(timeSlice / baselineWindow)
         timeSlice = timeSlice * baselineWindow
         maxTime = timeSlice + baselineWindow
-        triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineStartIndex]['value'], aboveBase, metricType)
+        maxEventTime = timeSlice + eventWindowSize
+        baselineIndex = baselineStartIndex
+        triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineIndex]['value'], aboveBase, metricType)
+        print ('Baseline ' + str(triggerPoint))
+        eventDatapoints = [] # An empty array to hold datapoints with in an event window
         events = [] # An array to hold found events
         alerts = [] # An array to hold alerts
-        
         # Loop through each ts datapoint
         for datapoint in obj['timeSeries']:
           # Check if we need to change up baseline to next window
-          if datapoint['timeIndex'] < maxTime:
-            events, alerts = self.checkForEvent(aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
-          else:
-            maxTime = maxTime + baselineWindow
-            baselineStartIndex = baselineStartIndex + 1
-            if baselineStartIndex >= len(baseline['baseline']):
-              baselineStartIndex = 0
-            triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineStartIndex]['value'], aboveBase, metricType)
-            events, alerts = self.checkForEvent(aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
-        
+          if type(datapoint) is dict:
+            if datapoint['timeIndex'] < maxTime:
+              if datapoint['timeIndex'] < maxEventTime:
+                eventDatapoints.append(datapoint)
+              else:
+                sorted(eventDatapoints, key = lambda i: i['value'])
+                p = math.floor(len(eventDatapoints) * (eventMesurment/100))
+                events, alerts = self.checkForEvent(aboveBase, eventDatapoints[p], triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
+                eventDatapoints = [datapoint]
+                maxEventTime = maxEventTime + eventWindowSize
+            else:
+              maxTime = maxTime + baselineWindow
+              baselineIndex = baselineIndex + 1
+              if baselineIndex >= len(baseline['baseline']):
+                baselineIndex = 0
+              triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineIndex]['value'], aboveBase, metricType)
+              print ('Next Baseline ' + str(triggerPoint))
+              sorted(eventDatapoints, key = lambda i: i['value'])
+              p = math.floor(len(eventDatapoints) * (eventMesurment/100))
+              events, alerts = self.checkForEvent(aboveBase, eventDatapoints[p], triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
         alertObj['alerts'] = alerts
         
         # Clean
@@ -282,7 +299,7 @@ class Baselines:
         triggerPoint = None
         events = None
         alerts = None
-        
       allAlerts.append(alertObj)
+      print ()
     
     return allAlerts

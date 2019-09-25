@@ -168,7 +168,7 @@ def getTSData(customerGroups, slices):
   """
   # Load query
   with open('./input/kentik_query_tsData.json', 'r') as json_file:
-    tsBulkQuery = json.load(json_file)
+    tsBulkQueryBase = json.load(json_file)
     json_file.close()
   json_file = None
     
@@ -199,6 +199,7 @@ def getTSData(customerGroups, slices):
     for tsSlice in slices:
       workingTimeslice = workingTimeslice + 1
       # Setup Query
+      tsBulkQuery = copy.deepcopy(tsBulkQueryBase)
       if len(tsBulkQuery['queries'][0]['query']['filters_obj']['filterGroups']) < 1:
         tsQuery['query']['filters_obj']['filterGroups'] = [{              
           'name': '',
@@ -229,7 +230,7 @@ def getTSData(customerGroups, slices):
         print('For ' + str(len(cGroup)) + ' customers')
         print('Submited Queries ' + str(len(tsBulkQuery['queries'])) + ' @ ' + str(datetime.now()))
         
-        endTime = datetime.now() + timedelta(seconds=10)
+        endTime = datetime.now() + timedelta(seconds=5)
         
         customerTSData = kAPI.topXQuery(tsBulkQuery)
       
@@ -310,10 +311,24 @@ def makeDB():
     'Content-Type': 'application/json',
     'Authorization': harperDB_Auth
   }
-  payload = "{\n  \"operation\":\"create_schema\",\n  \"schema\": \"kentik\"\n}"
-  response = requests.request('POST', harperDBUrl, headers=headers, data=payload, allow_redirects=False)
-  payload = "{\n  \"operation\":\"create_table\",\n  \"schema\":\"kentik\",\n  \"table\":\"kentikhistory\",\n  \"hash_attribute\": \"name\"\n}"
-  response = requests.request('POST', harperDBUrl, headers=headers, data=payload, allow_redirects=False)
+  payload = {
+    "operation":"create_schema",
+    "schema": "kentik"
+  }
+  response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
+  payload = {
+    "operation":"drop_table",
+    "schema": "kentik",
+    "table": "kentikhistory"
+  }
+  response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
+  payload = {
+    "operation":"create_table",
+    "schema": "kentik",
+    "table": "kentikhistory",
+    "hash_attribute": "name"
+  }
+  response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
 
 def dbUpdate(newData):
   headers = {
@@ -334,16 +349,16 @@ def dbUpdate(newData):
   # print (response)
   results = response.json()
   if (len(results) > 0):
-    # print ('Add to DB Entry')
-    newData['timeSeries'].extend(results[0])
+    print ('Add to DB Entry')
+    results[0]['timeSeries'].extend(newData['timeSeries'])
     payload = {
       "operation":"update",
       "schema": "kentik",
       "table": "kentikhistory",
-      "records": [newData]
+      "records": [results[0]]
     }
   else:
-    # print ('Add to new DB Entry')
+    print ('Add to new DB Entry')
     payload = {
       "operation":"insert",
       "schema": "kentik",
@@ -351,6 +366,7 @@ def dbUpdate(newData):
       "records": [newData]
     }
   response = requests.request('POST', harperDBUrl, headers=headers, data=json.dumps(payload), allow_redirects=False)
+  print (response.text)
   response = None
   headers = None
   payload = None
@@ -426,16 +442,16 @@ for atack in alerts:
 baseline = None
 tsData = None
 alerts = None
+atack = None
 print (str(len(atacks)) + ' Atacks Fond: ')
-print (atacks)
 print ()
 
 print ('Writing to csv')
 with open('./output/kentik_historic_events.csv', 'w') as csv_file:
-  csv_file.write('CustomerASN, StartTime, EndTime, Length, Value, Metric\n')
+  csv_file.write('CustomerASN, StartTime, EndTime, Length, Value, Baseline, Metric\n')
   for customer in atacks:
-    for atack in customer:
-      csv_file.write(customer['name'] + ',' + atack['start'] + ',' +  atack['end'] + ',' +  atack['length'] + ',' +  atack['value'] + ',' +  customer['metric'] + '\n')
+    for atack in customer['alerts']:
+      csv_file.write('"' + customer['name'] + '",' + str(atack['start']) + ',' +  str(atack['end']) + ',' +  str(atack['length']) + ',' +  str(atack['value']) + ',' + str(atack['baseline']) + ',' + customer['metric'] + '\n')
   csv_file.close()
 atacks = None
 print ('Alerts wrtien too ./output/kentik_historic_events.csv')
@@ -450,7 +466,7 @@ kah = sns.scatterplot(x='StartTime', y='Value',
                 hue='CustomerASN', size='Length',
                 palette='Blues_d',
                 sizes=(1, 8), linewidth=0,
-                data=diamonds, ax=ax)
+                data=atackDS, ax=ax)
 print ('Saving Graph Image to ./output/kentik_historic_events.png')
 plt.savefig('./output/kentik_historic_events.png')
 print ('Showing Graph Image')
