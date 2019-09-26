@@ -460,7 +460,10 @@ with open('./output/kentik_historic_events.csv', 'w') as csv_file:
     for attack in customer['alerts']:
       start = datetime.fromtimestamp(attack['start']/1000)
       end = datetime.fromtimestamp(attack['end']/1000)
-      csv_file.write('"' + customer['name'] + '",' + str(start) + ',' +  str(end) + ',' +  str(attack['length']) + ',' +  str(attack['value']/1000000) + ',' + str(attack['baseline']/1000000) + ',' + customer['metric'] + '\n')
+      attackLength = attack['length']
+      if attackLength < 1:
+        attackLength = 1
+      csv_file.write('"' + customer['name'] + '",' + str(start) + ',' +  str(end) + ',' +  str(attackLength) + ',' +  str(attack['value']/1000000) + ',' + str(attack['baseline']/1000000) + ',' + customer['metric'] + '\n')
   csv_file.close()
 attacks = None
 print ('Alerts wrtien too ./output/kentik_historic_events.csv')
@@ -472,7 +475,7 @@ attackDS = attackDS.rename(columns={'Length':'Attack Length'})
 print (attackDS)
 print ()
 print ('Attacks with durations larger then the event window:')
-df = attackDS[attackDS['Attack Length'] > 0]
+df = attackDS[attackDS['Attack Length (Mins)'] > 0]
 df = df.dropna()
 print (df.head())
 print ()
@@ -487,7 +490,7 @@ ax.set_ylabel(l, fontsize=8)
 f.autofmt_xdate()
 sns.despine(f, left=True, bottom=True)
 kah = sns.scatterplot(x='StartTime', y='Value',
-                      hue='Attack Length', size='Attack Length',
+                      hue='Attack Length (Mins)', size='Attack Length (Mins)',
                       palette='ch:r=-.2,d=.3_r',
                       sizes=(20, 100), linewidth=0, legend='brief',
                       data=attackDS, ax=ax)
@@ -507,7 +510,7 @@ ax.set_ylabel(l, fontsize=8)
 f.autofmt_xdate()
 sns.despine(f, left=True, bottom=True)
 kah2 = sns.scatterplot(x='StartTime', y='Value',
-                      hue='Attack Length', size='Attack Length',
+                      hue='Attack Length (Mins)', size='Attack Length (Mins)',
                       palette='ch:r=-.2,d=.3_r',
                       sizes=(20, 100), linewidth=0, legend='brief',
                       data=df.head(), ax=ax)
