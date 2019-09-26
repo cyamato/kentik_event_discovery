@@ -169,11 +169,12 @@ class Baselines:
     
     return triggerPoint
   
-  def checkForEvent(self, aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert):
-    if ((aboveBase > -1 and datapoint['value'] > triggerPoint) or (aboveBase < 0 and datapoint['value'] < triggerPoint)):
-      # print ('Event Check ' + str(datapoint['value']) + ':' + str(triggerPoint) + ':' + str(aboveBase))
-      events = self.addEvent(events, alertWindowSize, datapoint)
-      alerts = self.checkForAlert(alerts, alertSameWindow, eventsPerAlert, events, datapoint, triggerPoint)
+  def checkForEvent(self, aboveBase, datapoint, triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert,minimumBaselineThreshold):
+    if (datapoint['value'] > minimumBaselineThreshold):
+      if ((aboveBase > -1 and datapoint['value'] > triggerPoint) or (aboveBase < 0 and datapoint['value'] < triggerPoint)):
+        # print ('Event Check ' + str(datapoint['value']) + ':' + str(triggerPoint) + ':' + str(aboveBase))
+        events = self.addEvent(events, alertWindowSize, datapoint)
+        alerts = self.checkForAlert(alerts, alertSameWindow, eventsPerAlert, events, datapoint, triggerPoint)
     
     return events, alerts
   
@@ -206,12 +207,13 @@ class Baselines:
     """
     if len(events) >= eventsPerAlert:
       if (alerts and (alerts[-1]['end'] + alertSameWindow) > event['timeIndex']):
-        # Same alert
+        # Same 
+        # print('Orginal: ' + str(alerts[-1]['end']) + ' update: ' + str(event['timeIndex'])) 
         if alerts[-1]['value'] < event['value']:
           # Set alert to peak metric
           alerts[-1]['value'] = event['value']
         alerts[-1]['end'] = event['timeIndex']
-        alerts[-1]['length'] = (event['timeIndex']-alerts[-1]['start'])/600000 # In Minutes
+        alerts[-1]['length'] = (event['timeIndex']-alerts[-1]['start'])/60000 # In Minutes
       else:
         # New alert
         alerts.append({
@@ -223,7 +225,7 @@ class Baselines:
         })
     return alerts
   
-  def get_alerts(self, alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, eventMesurment, baselineStartIndex, baselineWindow, aboveBase, metricType, baselines, ts):
+  def get_alerts(self, alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, eventMesurment, baselineStartIndex, baselineWindow, aboveBase, minimumBaselineThreshold, metricType, baselines, ts):
     """
     This function looks for events in Kentik query normlized timeseries data based on a set of baslines
     alertWindowSize [int]: The number of seconds for the size of window in which to look for an alert
@@ -234,6 +236,7 @@ class Baselines:
     baselineStartIndex [int]: The first baseline to match to
     baselineWindow [int]: The number of seconds each base line incroment represnts
     aboveBase [int]: Trigger level above baseline (Can be negative)
+    minimumBaselineThreshold [int]: The minimum static threshold required for an alert in bits per second
     metricType [string{unit,precent}]: aboveBase type
     baselines [array]: An array of baseline objects from the build_baseline function of this class
     ts [array]: An array of Kentik Query normlized timeseries data object from the normlizeKentik function of this class
@@ -264,7 +267,7 @@ class Baselines:
         maxEventTime = timeSlice + eventWindowSize
         baselineIndex = baselineStartIndex
         triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineIndex]['value'], aboveBase, metricType)
-        print ('Baseline ' + str(triggerPoint))
+        # print ('Baseline ' + str(triggerPoint))
         eventDatapoints = [] # An empty array to hold datapoints with in an event window
         events = [] # An array to hold found events
         alerts = [] # An array to hold alerts
@@ -278,7 +281,7 @@ class Baselines:
               else:
                 sorted(eventDatapoints, key = lambda i: i['value'])
                 p = math.floor(len(eventDatapoints) * (eventMesurment/100))
-                events, alerts = self.checkForEvent(aboveBase, eventDatapoints[p], triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
+                events, alerts = self.checkForEvent(aboveBase, eventDatapoints[p], triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert, minimumBaselineThreshold)
                 eventDatapoints = [datapoint]
                 maxEventTime = maxEventTime + eventWindowSize
             else:
@@ -287,10 +290,10 @@ class Baselines:
               if baselineIndex >= len(baseline['baseline']):
                 baselineIndex = 0
               triggerPoint = self.getTargetFromBaseLine(baseline['baseline'][baselineIndex]['value'], aboveBase, metricType)
-              print ('Next Baseline ' + str(triggerPoint))
+              # print ('Next Baseline ' + str(triggerPoint))
               sorted(eventDatapoints, key = lambda i: i['value'])
               p = math.floor(len(eventDatapoints) * (eventMesurment/100))
-              events, alerts = self.checkForEvent(aboveBase, eventDatapoints[p], triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert)
+              events, alerts = self.checkForEvent(aboveBase, eventDatapoints[p], triggerPoint, events, alertWindowSize, alerts, alertSameWindow, eventsPerAlert, minimumBaselineThreshold)
         alertObj['alerts'] = alerts
         
         # Clean

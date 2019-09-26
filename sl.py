@@ -9,18 +9,19 @@ import math
 import copy
 from datetime import datetime
 from datetime import timedelta
+from datetime import date
 import hashlib
 import base64
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import pandas as pd
+from pandas.plotting import register_matplotlib_converters
 import requests
 
-# from memory_profiler import profile
-
-import kentik
-import baseline
+import kentik 
+import baseline 
 
 def args():
   """
@@ -435,46 +436,83 @@ firstBase = base.build_roll_up(3600, 95, tsData) # Find p95 per hour
 baseline = base.build_baseline(168, 95, firstBase)
 
 print ('Checking for events')
-# base.get_alerts(alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, baselineStartIndex, baselineWindow, aboveBase, metricType, baselines, ts)
-# 2 events within 10mins and every event with in 10mins is an alert where an event is a any mesurement with in 1min over 100% of the baseline using tsData as the input ts data
-alerts = base.get_alerts(600, 600, 2, 60, 0, 3600, 100, 'precent', baseline, tsData)
+# base.get_alerts(alertWindowSize, alertSameWindow, eventsPerAlert, eventWindowSize, eventMesurment, baselineStartIndex, baselineWindow, aboveBase, minimumBaselineThreshold, metricType, baselines, ts)
+# 2 events within 10mins and every event with in 10mins is an alert where an event is a any mesurement with in 1min over 200% of the baseline using tsData as the input ts data and a 1M minimum
+alerts = base.get_alerts(600, 600, 2, 120, 95, 0, 3600, 200, 1000000, 'precent', baseline, tsData)
 
 # Filter to only report clients with attacks
-print ('Just Atacks')
+print ('Just attacks')
 print ()
-atacks = []
-for atack in alerts:
-  if len(atack['alerts']) > 0:
-    atacks.append(atack.copy())
+attacks = []
+for attack in alerts:
+  if len(attack['alerts']) > 0:
+    attacks.append(attack.copy())
 baseline = None
 tsData = None
 alerts = None
-atack = None
-print (str(len(atacks)) + ' Atacks Fond: ')
-print ()
+attack = None
+print (str(len(attacks)) + ' attacks Fond')
 
 print ('Writing to csv')
 with open('./output/kentik_historic_events.csv', 'w') as csv_file:
-  csv_file.write('CustomerASN, StartTime, EndTime, Length, Value, Baseline, Metric\n')
-  for customer in atacks:
-    for atack in customer['alerts']:
-      csv_file.write('"' + customer['name'] + '",' + str(atack['start']) + ',' +  str(atack['end']) + ',' +  str(atack['length']) + ',' +  str(atack['value']) + ',' + str(atack['baseline']) + ',' + customer['metric'] + '\n')
+  csv_file.write('CustomerASN,StartTime,EndTime,Length,Value,Baseline,Metric\n')
+  for customer in attacks:
+    for attack in customer['alerts']:
+      start = datetime.fromtimestamp(attack['start']/1000)
+      end = datetime.fromtimestamp(attack['end']/1000)
+      csv_file.write('"' + customer['name'] + '",' + str(start) + ',' +  str(end) + ',' +  str(attack['length']) + ',' +  str(attack['value']/1000000) + ',' + str(attack['baseline']/1000000) + ',' + customer['metric'] + '\n')
   csv_file.close()
-atacks = None
+attacks = None
 print ('Alerts wrtien too ./output/kentik_historic_events.csv')
 
 print ('Making Graph')
-atackDS = pd.read_csv('./output/kentik_historic_events.csv')
+register_matplotlib_converters()
+attackDS = pd.read_csv('./output/kentik_historic_events.csv', parse_dates=['StartTime','EndTime'])
+attackDS = attackDS.rename(columns={'Length':'Attack Length'})
+print (attackDS)
+print ()
+print ('Attacks with durations larger then the event window:')
+df = attackDS[attackDS['Attack Length'] > 0]
+df = df.dropna()
+print (df.head())
+print ()
+
 sns.set(style='whitegrid')
-sns.set_context('poster')
-f, ax = plt.subplots(figsize=(6.5, 6.5))
+sns.set_context('paper')
+f, ax = plt.subplots()
+l = ax.get_xlabel()
+ax.set_xlabel(l, fontsize=8)
+l = ax.get_ylabel()
+ax.set_ylabel(l, fontsize=8)
+f.autofmt_xdate()
 sns.despine(f, left=True, bottom=True)
 kah = sns.scatterplot(x='StartTime', y='Value',
-                hue='CustomerASN', size='Length',
-                palette='Blues_d',
-                sizes=(1, 8), linewidth=0,
-                data=atackDS, ax=ax)
-print ('Saving Graph Image to ./output/kentik_historic_events.png')
+                      hue='Attack Length', size='Attack Length',
+                      palette='ch:r=-.2,d=.3_r',
+                      sizes=(20, 100), linewidth=0, legend='brief',
+                      data=attackDS, ax=ax)
+ax.fmt_xdata = mdates.DateFormatter('%Y-%m-%d')
+ax.set(xlabel='Attack Start Time', ylabel='Attack Size (Mbps)', title='DDoS Attacks Size/Date')
+ax.set_xlim([datetime.strptime(arguments.queryStartTime, '%Y-%m-%d %H:%M'), datetime.strptime(arguments.queryEndTime, '%Y-%m-%d %H:%M')])
 plt.savefig('./output/kentik_historic_events.png')
-print ('Showing Graph Image')
-plt.show()
+print ('Saving Graph Image to ./output/kentik_historic_events.png')
+
+sns.set(style='whitegrid')
+sns.set_context('paper')
+f, ax = plt.subplots()
+l = ax.get_xlabel()
+ax.set_xlabel(l, fontsize=8)
+l = ax.get_ylabel()
+ax.set_ylabel(l, fontsize=8)
+f.autofmt_xdate()
+sns.despine(f, left=True, bottom=True)
+kah2 = sns.scatterplot(x='StartTime', y='Value',
+                      hue='Attack Length', size='Attack Length',
+                      palette='ch:r=-.2,d=.3_r',
+                      sizes=(20, 100), linewidth=0, legend='brief',
+                      data=df.head(), ax=ax)
+ax.fmt_xdata = mdates.DateFormatter('%Y-%m-%d')
+ax.set(xlabel='Attack Start Time', ylabel='Attack Size (Mbps)', title='DDoS Attacks Size/Date')
+ax.set_xlim([datetime.strptime(arguments.queryStartTime, '%Y-%m-%d %H:%M'), datetime.strptime(arguments.queryEndTime, '%Y-%m-%d %H:%M')])
+plt.savefig('./output/kentik_historic_events_long.png')
+print ('Saving Graph Image to ./output/kentik_historic_events_long.png')

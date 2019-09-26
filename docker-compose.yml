@@ -2,15 +2,20 @@ version: "3.7"
 services:
   khistory:
     build: .
+    name: khistory
     environment:
-      - KENTIK_API_USER='johndoe@expans.com'
-      - KENTIK_API_PASSWORD='adsf8960svypzsyadf06g'
+      - KENTIK_API_USER="johndoe@expans.com"
+      - KENTIK_API_PASSWORD="adsf8960svypzsyadf06g"
+      - HARPERDB_URL="harperdb:9925"
+      - HARPERDB_USER="HDB_ADMIN"
+      - HARPERDB_PASSWORD="1400"
     volumes:
       - "/tmp:/usr/src/app/output"
       - "/tmp/input:/usr/src/app/input"
     command: [ './sl.py' ]
-  harperdb:
+  harperdb: 
     image: harperdb/hdb
+    name: harperdb
     expose:
       - "9925"
     container_name: harperdb
