@@ -125,11 +125,11 @@ print ('Alerts wrtien too ./output/kentik_historic_events.csv')
 print ('Making Graph')
 register_matplotlib_converters()
 attackDS = pd.read_csv('./output/kentik_historic_events.csv', parse_dates=['StartTime','EndTime'])
-attackDS = attackDS.rename(columns={'Length':'Attack Length'})
+attackDS = attackDS.rename(columns={'Length':'Attack Length (mins)'})
 print (attackDS)
 print ()
 print ('Attacks with durations larger then the event window:')
-df = attackDS[attackDS['Attack Length (Mins)'] > 0]
+df = attackDS[attackDS['Attack Length (mins)'] > 0]
 df = df.dropna()
 print (df.head())
 print ()
@@ -144,7 +144,7 @@ ax.set_ylabel(l, fontsize=8)
 f.autofmt_xdate()
 sns.despine(f, left=True, bottom=True)
 kah = sns.scatterplot(x='StartTime', y='Value',
-                      hue='Attack Length (Mins)', size='Attack Length (Mins)',
+                      hue='Attack Length (mins)', size='Attack Length (mins)',
                       palette='ch:r=-.2,d=.3_r',
                       sizes=(20, 100), linewidth=0, legend='brief',
                       data=attackDS, ax=ax)
@@ -164,7 +164,7 @@ ax.set_ylabel(l, fontsize=8)
 f.autofmt_xdate()
 sns.despine(f, left=True, bottom=True)
 kah2 = sns.scatterplot(x='StartTime', y='Value',
-                      hue='Attack Length (Mins)', size='Attack Length (Mins)',
+                      hue='Attack Length (mins)', size='Attack Length (mins)',
                       palette='ch:r=-.2,d=.3_r',
                       sizes=(20, 100), linewidth=0, legend='brief',
                       data=df.head(), ax=ax)
