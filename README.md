@@ -101,7 +101,7 @@ already ran
 * **buffer_cache.json**:  The buffer cache file of results if a database is not 
 being used
 
-![alt text](https://raw.githubusercontent.com/cyamato/kentik_event_discovery/master/sample.png "Sample Plot Image")
+![sample plot](https://raw.githubusercontent.com/cyamato/kentik_event_discovery/master/sample.png "Sample Plot Image")
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to 

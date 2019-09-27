@@ -151,7 +151,7 @@ kah = sns.scatterplot(x='StartTime', y='Value',
 ax.fmt_xdata = mdates.DateFormatter('%Y-%m-%d')
 ax.set(xlabel='Attack Start Time', ylabel='Attack Size (Mbps)', title='DDoS Attacks Size/Date')
 ax.set_xlim([datetime.strptime(arguments.queryStartTime, '%Y-%m-%d %H:%M'), datetime.strptime(arguments.queryEndTime, '%Y-%m-%d %H:%M')])
-plt.savefig('./output/kentik_historic_events.png')
+plt.savefig('./output/kentik_historic_events.png', format='png')
 print ('Saving Graph Image to ./output/kentik_historic_events.png')
 
 sns.set(style='whitegrid')
@@ -171,5 +171,5 @@ kah2 = sns.scatterplot(x='StartTime', y='Value',
 ax.fmt_xdata = mdates.DateFormatter('%Y-%m-%d')
 ax.set(xlabel='Attack Start Time', ylabel='Attack Size (Mbps)', title='DDoS Attacks Size/Date')
 ax.set_xlim([datetime.strptime(arguments.queryStartTime, '%Y-%m-%d %H:%M'), datetime.strptime(arguments.queryEndTime, '%Y-%m-%d %H:%M')])
-plt.savefig('./output/kentik_historic_events_long.png')
+plt.savefig('./output/kentik_historic_events_long.png', format='png')
 print ('Saving Graph Image to ./output/kentik_historic_events_long.png')
